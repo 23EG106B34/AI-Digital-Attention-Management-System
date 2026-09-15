@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FocusGuard AI Extension</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <div class="brand">
+      <div class="brand-icon">🛡️</div>
+      <div class="brand-name">FocusGuard <span class="badge">Collector</span></div>
+    </div>
+    <div id="authStatus" class="status-indicator online">Connected</div>
+  </div>
+
+  <!-- Login Section (Only shown if token is missing) -->
+  <div id="loginSection" class="section hidden">
+    <p class="login-intro">Connect this collector to your FocusGuard Web App account:</p>
+    <input type="text" id="usernameInput" placeholder="Username" />
+    <input type="password" id="passwordInput" placeholder="Password" />
+    <button id="loginBtn" class="btn btn-primary">Connect to Web App</button>
+    <div id="loginError" class="error-msg"></div>
+  </div>
+
+  <!-- Minimal Connected State -->
+  <div id="statsSection" class="section">
+    <div class="collector-status-card">
+      <div class="pulse-dot"></div>
+      <div>
+        <div class="collector-title">Browsing Telemetry Active</div>
+        <div class="collector-subtitle">Silently collecting URLs & analyzing productivity</div>
+      </div>
+    </div>
+
+    <div class="metric-compact">
+      <div class="compact-label">Today's Browsing Sync:</div>
+      <div class="compact-val" id="todaySyncCount">Active</div>
+    </div>
+
+    <div class="actions">
+      <button id="openAppBtn" class="btn btn-primary">
+        🚀 Open FocusGuard Web App
+      </button>
+      <button id="logoutBtn" class="btn btn-secondary" style="margin-top: 6px;">
+        Disconnect
+      </button>
+    </div>
+  </div>
+
+  <script src="api_client.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

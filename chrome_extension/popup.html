@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FocusGuard AI</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 22C12 22 20 18 20 12V5L12 2L4 5V12C4 18 12 22 12 22Z" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="12" cy="12" r="3" fill="#38bdf8"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>FOCUSGUARD AI</h1>
+          <span class="sub-title">Attention & Distraction Intelligence</span>
+        </div>
+      </div>
+      <div id="status-badge" class="status-badge active" title="Extension tracking status">
+        <span class="status-dot"></span>
+        <span id="status-text">Active</span>
+      </div>
+    </header>
+
+    <!-- Current Website (Main Focus) -->
+    <section class="section-card current-site-card">
+      <div class="card-header-row">
+        <span class="section-label">CURRENT WEBSITE</span>
+      </div>
+      <div class="current-site-body">
+        <div id="current-domain" class="current-domain">Detecting...</div>
+        <div class="timer-row">
+          <span class="timer-label">Session</span>
+          <span id="current-timer" class="current-timer">00:00</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- This Hour Summary -->
+    <section class="section-card hourly-card">
+      <div class="card-header-row">
+        <span class="section-label">THIS HOUR</span>
+        <span id="current-hour-stat" class="hour-window">--:--–--:--</span>
+      </div>
+      <div class="hourly-grid">
+        <div class="metric-item">
+          <span class="metric-label">Switches</span>
+          <span id="switch-count-stat" class="metric-value">0</span>
+        </div>
+        <div class="metric-divider"></div>
+        <div class="metric-item">
+          <span class="metric-label">Status</span>
+          <span id="focus-status-badge" class="focus-badge status-productive">Productive</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Recent Activity -->
+    <section class="section-card activity-card">
+      <div class="card-header-row">
+        <span class="section-label">RECENT ACTIVITY</span>
+        <span id="session-count-tag" class="count-tag">0 records</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="activity-table">
+          <thead>
+            <tr>
+              <th class="th-domain">DOMAIN</th>
+              <th class="th-time">TIME</th>
+              <th class="th-duration">DURATION</th>
+            </tr>
+          </thead>
+          <tbody id="activity-tbody">
+            <!-- Dynamically populated rows -->
+          </tbody>
+        </table>
+        <div id="empty-state" class="empty-state hidden">
+          <span>No browsing activity recorded yet.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Recent Switches (Collapsible) -->
+    <details class="switches-details" id="switches-details">
+      <summary class="switches-summary">
+        <div class="summary-left">
+          <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+          <span>Recent switches</span>
+        </div>
+        <span id="switch-count-tag" class="count-tag">0</span>
+      </summary>
+      <div class="switches-content">
+        <div id="switches-list" class="switches-list">
+          <!-- Dynamically populated switch routes -->
+        </div>
+        <div id="empty-switches" class="empty-state hidden">
+          <span>No domain switches recorded this hour.</span>
+        </div>
+      </div>
+    </details>
+
+    <!-- Footer with Secondary Total and Actions -->
+    <footer class="app-footer">
+      <div class="total-tracked-row">
+        <span class="total-label">Tracked today:</span>
+        <span id="total-time-stat" class="total-value">00:00</span>
+      </div>
+      <div class="footer-buttons">
+        <button id="btn-refresh" class="btn btn-secondary" title="Refresh local data">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l6.73-6.73"/>
+          </svg>
+          Refresh
+        </button>
+        <button id="btn-clear" class="btn btn-danger" title="Clear recorded sessions and switch history">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+          Clear Data
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -19,7 +19,11 @@ def seed_knowledge_base():
                 content = f.read().strip()
                 if content:
                     doc_id = f"doc_{filename}"
-                    embedding = embed_text(content)
+                    try:
+                        embedding = embed_text(content)
+                    except Exception as exc:
+                        print(f"[RAG Seed Warning] skipping {filename}: {exc}")
+                        continue
                     collection.upsert(
                         ids=[doc_id],
                         documents=[content],

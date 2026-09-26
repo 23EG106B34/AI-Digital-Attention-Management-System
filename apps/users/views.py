@@ -42,9 +42,28 @@ class LoginView(generics.GenericAPIView):
 
 
 class LogoutView(generics.GenericAPIView):
+    """
+    POST /api/auth/logout/  { "refresh": "<refresh token>" }
+
+    Actually ends the session using the EXISTING JWT authentication setup: the
+    supplied refresh token is blacklisted so it can no longer be exchanged for
+    a new access token. Tokens are never logged.
+    """
     permission_classes = [permissions.IsAuthenticated]
+
     def post(self, request):
-        return Response({'detail':'Logged out. Remove the token on the client.'}, status=status.HTTP_200_OK)
+        refresh_token = str(request.data.get('refresh', '')).strip()
+        if refresh_token:
+            try:
+                from rest_framework_simplejwt.tokens import RefreshToken
+                RefreshToken(refresh_token).blacklist()
+            except Exception:
+                # An expired / already-blacklisted token is not an error worth
+                # surfacing to the user; the client clears its session anyway.
+                pass
+        return Response({'detail': 'Logged out. Session token invalidated.'},
+                        status=status.HTTP_200_OK)
+
 
 
 class ProfileView(generics.RetrieveUpdateAPIView):

@@ -32,13 +32,41 @@ const state = {
 };
 
 /* ═══════════════════════════════════════════════════════
+   I18N / TRANSLATION HELPER (Milestone 3)
+   ═══════════════════════════════════════════════════════ */
+function tr(s) {
+  try {
+    if (window.fgI18n && typeof window.fgI18n.t === 'function') {
+      return window.fgI18n.t(s);
+    }
+  } catch (e) {}
+  return s;
+}
+
+const GOAL_DISPLAY_LABELS = {
+  STUDYING: 'Studying',
+  CODING: 'Coding',
+  ASSIGNMENT: 'Assignment',
+  ONLINE_LEARNING: 'Online Learning',
+  GAMES: 'Gaming / Free Play',
+  OTHER: 'Other / General Focus',
+};
+
+function goalLabel(goalKey) {
+  if (!goalKey) return 'Studying';
+  const k = String(goalKey).toUpperCase();
+  return GOAL_DISPLAY_LABELS[k] || goalKey;
+}
+
+/* ═══════════════════════════════════════════════════════
    TOAST NOTIFICATIONS
    ═══════════════════════════════════════════════════════ */
 function toast(msg, type = '') {
   const stack = document.getElementById('toastStack');
   const el = document.createElement('div');
   el.className = `toast ${type}`;
-  el.innerHTML = `<span class="toast-dot"></span><span>${msg}</span>`;
+  const translated = tr(msg);
+  el.innerHTML = `<span class="toast-dot"></span><span>${htmlEsc(translated)}</span>`;
   stack.appendChild(el);
   setTimeout(() => {
     el.classList.add('removing');
@@ -347,7 +375,9 @@ const TAB_TITLES = {
   goals:     'Goals',
   achievements: 'Badges & Streaks',
   profile:   'Profile',
+  'ai-chat': 'AI Assistant',
 };
+
 
 qsa('.nav-item[data-tab]').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
@@ -1179,21 +1209,59 @@ function renderDonut(prodPct, distPct) {
 async function startFocusSession() {
   const startBtn = qs('#dashStartSessionBtn');
   const endBtn = qs('#dashEndSessionBtn');
+  const startTimerBtn = qs('#startTimerBtn');
+  const endTimerBtn = qs('#endTimerBtn');
+
+  // Pick goal: prefer whichever select is actually visible or has an explicit selection
+  let selectedGoal = 'STUDYING';
+  const dashSelect = qs('#focusGoalSelect');
+  const tabSelect = qs('#focusTabGoalSelect');
+  if (state.activeTab === 'focus' && tabSelect && tabSelect.value) {
+    selectedGoal = tabSelect.value;
+  } else if (dashSelect && dashSelect.value) {
+    selectedGoal = dashSelect.value;
+  } else if (tabSelect && tabSelect.value) {
+    selectedGoal = tabSelect.value;
+  }
+  // Sync both selects
+  if (dashSelect) dashSelect.value = selectedGoal;
+  if (tabSelect) tabSelect.value = selectedGoal;
+
+  const btnLabel = tr('Starting...');
   if (startBtn) {
     startBtn.disabled = true;
-    startBtn.innerHTML = `<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite;margin-right:6px;"></span> Starting...`;
+    startBtn.innerHTML = `<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite;margin-right:6px;"></span> ${btnLabel}`;
   }
+  if (startTimerBtn) {
+    startTimerBtn.disabled = true;
+    startTimerBtn.innerHTML = `<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite;margin-right:6px;"></span> ${btnLabel}`;
+  }
+
+  const resetStartButtons = () => {
+    const startTxt = tr('Start Session');
+    if (startBtn) {
+      startBtn.disabled = false;
+      startBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> <span data-i18n="Start Session">${startTxt}</span>`;
+    }
+    if (startTimerBtn) {
+      startTimerBtn.disabled = false;
+      startTimerBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> ${startTxt}`;
+    }
+  };
+
   try {
     const res = await apiFetch('/focus/start/', {
       method: 'POST',
       body: JSON.stringify({
         session_type: 'DEEP_WORK',
+        goal: selectedGoal,
         planned_duration_mins: 0
       })
     });
     if (res.ok) {
       const data = await res.json();
       state.activeSessionId = data.id;
+      state.currentGoal = data.goal || selectedGoal;
       state.liveProdSecs = 0;
       state.liveDistSecs = 0;
       state.liveNeutSecs = 0;
@@ -1207,36 +1275,45 @@ async function startFocusSession() {
       setEl('switchVal', '0');
 
       // INSTANT ZERO-LATENCY TOGGLE: switch directly to Stop Session
-      if (startBtn) {
-        startBtn.disabled = false;
-        startBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Session`;
-        startBtn.style.display = 'none';
-      }
+      resetStartButtons();
+      if (startBtn) startBtn.style.display = 'none';
+      if (startTimerBtn) startTimerBtn.style.display = 'none';
+
+      const stopTxt = tr('Stop Session');
       if (endBtn) {
         endBtn.disabled = false;
-        endBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg> Stop Session`;
+        endBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg> <span data-i18n="Stop Session">${stopTxt}</span>`;
         endBtn.style.display = 'inline-flex';
       }
+      if (endTimerBtn) {
+        endTimerBtn.disabled = false;
+        endTimerBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg> ${stopTxt}`;
+        endTimerBtn.style.display = 'inline-flex';
+      }
+
       updateDashSessionUI(data);
 
-      toast('🚀 Focus session started! Tracking attention & activity in real time.', 'success');
+      const label = goalLabel(selectedGoal);
+      toast(`🚀 Focus session started for goal: ${label}!`, 'success');
       fetchDashboard();
     } else {
-      if (startBtn) {
-        startBtn.disabled = false;
-        startBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Session`;
-      }
-      toast('Failed to start focus session', 'danger');
+      resetStartButtons();
+      let errMsg = 'Failed to start focus session';
+      try {
+        const errJson = await res.json();
+        if (errJson.error) errMsg = errJson.error;
+        else if (errJson.detail) errMsg = errJson.detail;
+        else if (errJson.goal) errMsg = `Goal: ${errJson.goal[0] || errJson.goal}`;
+      } catch (e) {}
+      toast(errMsg, 'danger');
     }
   } catch (e) {
     console.error('Error starting focus session:', e);
-    if (startBtn) {
-      startBtn.disabled = false;
-      startBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Session`;
-    }
+    resetStartButtons();
     toast('Error starting focus session', 'danger');
   }
 }
+
 
 async function endFocusSession() {
   const startBtn = qs('#dashStartSessionBtn');
@@ -1920,6 +1997,7 @@ qs('#dashEndSessionBtn')?.addEventListener('click', endFocusSession);
 function startPoll() {
   stopPoll();
   state.pollTimer = setInterval(() => {
+    updateCurrentFocusDisplay();
     const tab = state.activeTab;
     if (tab === 'dashboard') fetchDashboard();
     else if (tab === 'switches') fetchSwitches();
@@ -1927,6 +2005,7 @@ function startPoll() {
     else if (tab === 'system') fetchSystemData();
   }, POLL_MS);
 }
+
 
 function stopPoll() {
   if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
@@ -2066,14 +2145,19 @@ function toggleSoundMute() {
 }
 
 let lastDistractionChimeTime = 0;
-function checkAndPlayDistractionChime(label) {
+function checkAndPlayDistractionChime(label, app, tab, durSecs) {
   const now = Date.now();
   if (now - lastDistractionChimeTime > 25000) {
     lastDistractionChimeTime = now;
     playChime('distraction');
-    toast(`⚠️ Focus alert: ${label} is distracting during your session`, 'warning');
+    const curGoal = state.currentGoal || 'Coding';
+    const appInfo = app || label || 'Google Chrome';
+    const tabInfo = tab ? ` · Tab: ${tab}` : '';
+    const durInfo = durSecs ? ` · ${formatDuration(durSecs)}` : '';
+    toast(`⚠️ FOCUS ALERT [${curGoal}]: ${appInfo}${tabInfo}${durInfo} is marked as a distraction`, 'warning');
   }
 }
+
 
 /* ═══════════════════════════════════════════════════════
    BREAK & HYDRATION REMINDERS (Feature 5)
@@ -3059,6 +3143,373 @@ qs('#topbarStreakWidget')?.addEventListener('click', () => switchTab('achievemen
 qs('#filterBadgeAll')?.addEventListener('click', () => setBadgesFilter('all'));
 qs('#filterBadgeUnlocked')?.addEventListener('click', () => setBadgesFilter('unlocked'));
 qs('#filterBadgeLocked')?.addEventListener('click', () => setBadgesFilter('locked'));
+/* ═══════════════════════════════════════════════════════
+   MILESTONE 3: M3 ENGINE MODULE
+   ═══════════════════════════════════════════════════════ */
+let idlePopupCountdownTimer = null;
+let idlePopupSecondsLeft = 180;
+
+function initTheme() {
+  const saved = localStorage.getItem('fg_theme') || 'light';
+  applyTheme(saved);
+  qs('#themeToggleBtn')?.addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-theme') || 'light';
+    applyTheme(cur === 'dark' ? 'light' : 'dark');
+  });
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('fg_theme', theme);
+  const sun = qs('#themeIconSun');
+  const moon = qs('#themeIconMoon');
+  if (theme === 'dark') {
+    if (sun) sun.style.display = 'none';
+    if (moon) moon.style.display = 'block';
+  } else {
+    if (sun) sun.style.display = 'block';
+    if (moon) moon.style.display = 'none';
+  }
+}
+
+function initI18n() {
+  const sel = qs('#globalLangSelect');
+  if (sel && window.fgI18n) {
+    sel.value = window.fgI18n.getLang();
+    sel.addEventListener('change', () => {
+      window.fgI18n.setLang(sel.value);
+    });
+  }
+}
+
+function initProfileDropdown() {
+  const btn = qs('#profileMenuBtn');
+  const menu = qs('#profileDropdownMenu');
+  if (!btn || !menu) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+  });
+  document.addEventListener('click', (e) => {
+    if (!menu.contains(e.target) && e.target !== btn) {
+      menu.style.display = 'none';
+    }
+  });
+  qs('#dropdownProfileBtn')?.addEventListener('click', () => {
+    menu.style.display = 'none';
+    switchTab('profile');
+  });
+  qs('#dropdownManageBtn')?.addEventListener('click', () => {
+    menu.style.display = 'none';
+    switchTab('profile');
+  });
+  qs('#dropdownLogoutBtn')?.addEventListener('click', () => {
+    menu.style.display = 'none';
+    signOut();
+  });
+}
+
+async function updateCurrentFocusDisplay() {
+  try {
+    const res = await apiFetch('/focus/current-status/');
+    if (!res.ok) return;
+    const d = await res.json();
+    setEl('cfGoal', d.goal || 'Studying');
+    setEl('cfApp', d.current_app || '—');
+    const tabEl = qs('#cfTab');
+    if (tabEl) {
+      tabEl.textContent = d.current_tab || 'Current tab information unavailable';
+      tabEl.title = d.current_tab || 'Current tab information unavailable';
+    }
+    setEl('cfDomain', d.domain || '—');
+    setEl('cfDuration', formatDuration(d.duration_secs || 0));
+
+    const badgeEl = qs('#cfStatusBadge');
+    if (badgeEl) {
+      badgeEl.textContent = d.status || 'Idle';
+      if (d.status === 'Focused') {
+        badgeEl.style.background = 'var(--color-success-bg)';
+        badgeEl.style.color = 'var(--color-success)';
+      } else if (d.status === 'Distracted' || d.status === 'Blocked') {
+        badgeEl.style.background = 'var(--color-danger-bg)';
+        badgeEl.style.color = 'var(--color-danger)';
+      } else {
+        badgeEl.style.background = 'var(--bg-muted)';
+        badgeEl.style.color = 'var(--text-600)';
+      }
+    }
+
+    if (d.should_prompt_idle) showIdlePopup(d);
+    if (d.should_prompt_return) showReturnExperience(d);
+    if (d.should_prompt_hourly) showHourlyRefresh(d);
+  } catch (e) {}
+}
+
+function showIdlePopup(d) {
+  const modal = qs('#idleDistractionModal');
+  if (!modal || modal.style.display === 'flex') return;
+
+  const rawGoal = d.goal || 'STUDYING';
+  const displayGoal = goalLabel(rawGoal);
+  setEl('idleGoalDisplay', displayGoal);
+  setEl('idleAppDisplay', d.current_app || '—');
+  setEl('idleTabDisplay', d.current_tab || 'Current tab information unavailable');
+
+  const questions = {
+    'STUDYING': 'What topic are you currently studying?',
+    'CODING': 'What are you currently trying to implement?',
+    'ASSIGNMENT': 'What part of the assignment are you working on?',
+    'ONLINE_LEARNING': 'What topic are you learning right now?',
+    'GAMES': 'What are you playing or exploring right now?',
+    'OTHER': 'What are you currently focusing on?',
+  };
+  const goalKey = String(rawGoal).toUpperCase();
+  setEl('idleGoalQuestion', questions[goalKey] || questions['STUDYING']);
+
+  modal.style.display = 'flex';
+  idlePopupSecondsLeft = 180;
+  setEl('idleCountdownSecs', idlePopupSecondsLeft);
+
+  if (idlePopupCountdownTimer) clearInterval(idlePopupCountdownTimer);
+  idlePopupCountdownTimer = setInterval(async () => {
+    idlePopupSecondsLeft--;
+    setEl('idleCountdownSecs', idlePopupSecondsLeft);
+    if (idlePopupSecondsLeft <= 0) {
+      clearInterval(idlePopupCountdownTimer);
+      modal.style.display = 'none';
+      await apiFetch('/focus/idle-response/', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'LOCK' })
+      });
+      toast('Focus session auto-locked due to inactivity.', 'danger');
+    }
+  }, 1000);
+}
+
+function closeIdlePopup() {
+  const modal = qs('#idleDistractionModal');
+  if (modal) modal.style.display = 'none';
+  if (idlePopupCountdownTimer) clearInterval(idlePopupCountdownTimer);
+}
+function initIdleModalListeners() {
+  qs('#idleActiveBtn')?.addEventListener('click', async () => {
+    const topic = qs('#idleTopicAnswer')?.value || '';
+    closeIdlePopup();
+    try {
+      await apiFetch('/focus/idle-response/', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'ACTIVE', topic })
+      });
+      toast("Welcome back! You're marked active.", 'success');
+    } catch (e) {}
+  });
+
+  qs('#idleAwayBtn')?.addEventListener('click', async () => {
+    closeIdlePopup();
+    try {
+      await apiFetch('/focus/idle-response/', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'AWAY' })
+      });
+      toast("Marked as Away. We'll pause your session.", 'info');
+    } catch (e) {}
+  });
+}
+
+function showReturnExperience(d) {
+  const modal = qs('#returnExperienceModal');
+  if (!modal || modal.style.display === 'flex') return;
+
+  const awayMins = Math.round((d.away_secs || 0) / 60);
+  setEl('returnAwayTitle', `You were away for ${awayMins} minute${awayMins === 1 ? '' : 's'}.`);
+
+  const msgEl = qs('#returnMotivationalMsg');
+  const resumeBtn = qs('#returnResumeBtn');
+  if (msgEl) msgEl.style.display = 'none';
+  if (resumeBtn) resumeBtn.style.display = 'none';
+
+  modal.style.display = 'flex';
+}
+
+function initReturnExperienceListeners() {
+  qsa('.return-activity-choice').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const act = btn.getAttribute('data-act');
+      const msgEl = qs('#returnMotivationalMsg');
+      const resumeBtn = qs('#returnResumeBtn');
+
+      try {
+        await apiFetch('/focus/return-response/', {
+          method: 'POST',
+          body: JSON.stringify({ activity: act })
+        });
+      } catch (e) {}
+
+      if (msgEl) {
+        msgEl.textContent = "Welcome back. Let's continue your focus session.";
+        msgEl.style.display = 'block';
+      }
+      if (resumeBtn) {
+        resumeBtn.style.display = 'block';
+      }
+    });
+  });
+
+  qs('#returnResumeBtn')?.addEventListener('click', () => {
+    const modal = qs('#returnExperienceModal');
+    if (modal) modal.style.display = 'none';
+  });
+}
+
+function showHourlyRefresh(d) {
+  const modal = qs('#hourlyRefreshModal');
+  if (!modal || modal.style.display === 'flex') return;
+
+  const rawGoal = d.goal || 'STUDYING';
+  const label = goalLabel(rawGoal).toUpperCase();
+  setEl('refreshGoalTag', `${label} REFRESH`);
+
+  const qMap = {
+    'CODING': 'Quick sanity check: Are edge cases and error handlers covered in your latest function?',
+    'STUDYING': 'Quick comprehension check: Can you summarize the core concept you just read in one sentence?',
+    'ASSIGNMENT': 'Milestone check: What is the remaining key section needed to complete this deliverable?',
+    'ONLINE_LEARNING': 'Concept check: What was the primary takeaway from the last lesson or video segment?',
+    'GAMES': 'Session check: Are you feeling refreshed and ready to return to focused work?',
+    'OTHER': 'Focus check: What is the main progress you made during this past hour?',
+  };
+  const goalKey = String(rawGoal).toUpperCase();
+  setEl('refreshQuestionText', qMap[goalKey] || qMap['STUDYING']);
+
+  modal.style.display = 'flex';
+}
+
+function initHourlyRefreshListeners() {
+  qs('#btnDismissRefresh')?.addEventListener('click', () => {
+    const modal = qs('#hourlyRefreshModal');
+    if (modal) modal.style.display = 'none';
+  });
+  qs('#btnAcknowledgeRefresh')?.addEventListener('click', () => {
+    const modal = qs('#hourlyRefreshModal');
+    if (modal) modal.style.display = 'none';
+    toast('Great work! Keep up the deep focus.', 'success');
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
+   MILESTONE 3: AI CHATBOT CONTROLLER (Feature 9)
+   ═══════════════════════════════════════════════════════ */
+function initAIChat() {
+  const input = qs('#aiChatInput');
+  const sendBtn = qs('#aiChatSendBtn');
+  const msgs = qs('#aiChatMessages');
+
+  if (!input || !sendBtn || !msgs) return;
+
+  const sendMessage = async () => {
+    const question = input.value.trim();
+    if (!question) return;
+
+    input.value = '';
+
+    const userMsg = document.createElement('div');
+    userMsg.className = 'chat-msg chat-msg-user';
+    userMsg.style.cssText = 'display:flex; justify-content:flex-end; gap:10px; align-self:flex-end; max-width:85%;';
+    userMsg.innerHTML = `
+      <div style="background:var(--brand-600); color:white; border-radius:var(--r-md); padding:10px 14px; font-size:13.5px; line-height:1.5;">
+        ${htmlEsc(question)}
+      </div>
+    `;
+    msgs.appendChild(userMsg);
+    msgs.scrollTop = msgs.scrollHeight;
+
+    const botLoading = document.createElement('div');
+    botLoading.className = 'chat-msg chat-msg-bot';
+    botLoading.style.cssText = 'display:flex; gap:10px; max-width:85%;';
+    botLoading.innerHTML = `
+      <div style="width:30px; height:30px; border-radius:50%; background:var(--brand-500); color:white; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px;">🤖</div>
+      <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--r-md); padding:10px 14px; font-size:13.5px; color:var(--text-600);">
+        Thinking...
+      </div>
+    `;
+    msgs.appendChild(botLoading);
+    msgs.scrollTop = msgs.scrollHeight;
+
+    try {
+      const lang = (window.fgI18n && window.fgI18n.getLang && window.fgI18n.getLang()) || 'en';
+      const res = await apiFetch('/ai/ask/', {
+        method: 'POST',
+        body: JSON.stringify({ question, lang })
+      });
+      botLoading.remove();
+
+      let reply = "I don't have enough activity data to answer that yet.";
+      let replySource = '';
+      if (res.ok) {
+        const d = await res.json();
+        reply = d.answer || d.response || reply;
+        const src = d.source || (Array.isArray(d.sources) && d.sources.length === 1 ? d.sources[0] : '');
+        // Knowledge answers keep only one small optional source line; raw
+        // chunks are never rendered because the backend now summarizes them.
+        if (d.intent === 'knowledge' && src) replySource = `Source: ${src}`;
+      } else {
+        let detail = '';
+        try {
+          const err = await res.json();
+          detail = err.detail || err.error || '';
+        } catch {}
+        reply = res.status === 401
+          ? 'Please sign in again to use the AI Assistant.'
+          : (detail ? `Request failed (${res.status}): ${detail}` : `Request failed (${res.status}). Please try again.`);
+      }
+
+      // Answers are already escaped, so only the safe **bold** markers that the
+      // backend emits are upgraded to <strong>; nothing else is interpreted.
+      const replyHtml = htmlEsc(reply).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      const sourceHtml = replySource
+        ? `<div style="margin-top:6px; font-size:11.5px; color:var(--text-600);">${htmlEsc(replySource)}</div>`
+        : '';
+
+      const botMsg = document.createElement('div');
+      botMsg.className = 'chat-msg chat-msg-bot';
+      botMsg.style.cssText = 'display:flex; gap:10px; max-width:85%;';
+      botMsg.innerHTML = `
+        <div style="width:30px; height:30px; border-radius:50%; background:var(--brand-500); color:white; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px;">🤖</div>
+        <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--r-md); padding:12px 16px; font-size:13.5px; line-height:1.6; color:var(--text-900); white-space:pre-wrap;">
+          ${replyHtml}${sourceHtml}
+        </div>
+      `;
+      msgs.appendChild(botMsg);
+      msgs.scrollTop = msgs.scrollHeight;
+    } catch (e) {
+      botLoading.remove();
+      const botMsg = document.createElement('div');
+      botMsg.className = 'chat-msg chat-msg-bot';
+      botMsg.style.cssText = 'display:flex; gap:10px; max-width:85%;';
+      botMsg.innerHTML = `
+        <div style="width:30px; height:30px; border-radius:50%; background:var(--brand-500); color:white; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px;">🤖</div>
+        <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--r-md); padding:12px 16px; font-size:13.5px; line-height:1.6; color:var(--text-900);">
+          I don't have enough activity data to answer that yet.
+        </div>
+      `;
+      msgs.appendChild(botMsg);
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+  };
+
+  sendBtn.addEventListener('click', sendMessage);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendMessage();
+  });
+
+  qsa('.chat-quick-prompt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      input.value = btn.getAttribute('data-prompt') || '';
+      sendMessage();
+    });
+  });
+}
+
+
 
 /* ═══════════════════════════════════════════════════════
    INIT
@@ -3066,12 +3517,22 @@ qs('#filterBadgeLocked')?.addEventListener('click', () => setBadgesFilter('locke
 function initApp() {
   hideLogin();
   updateSoundToggleUI();
+  initTheme();
+  initI18n();
+  initProfileDropdown();
+  initIdleModalListeners();
+  initReturnExperienceListeners();
+  initHourlyRefreshListeners();
+  initAIChat();
   const u = state.username || 'User';
   qs('#userAvatar').textContent = u.charAt(0).toUpperCase();
   qs('#sidebarUsername').textContent = u;
+  qs('#headerProfileName').textContent = u;
   switchTab('dashboard');
   fetchGamificationData();
+  updateCurrentFocusDisplay();
   startPoll();
+
 
   window.addEventListener('focusguard-extension-ready', () => {
     const extValEl = qs('#extVal');

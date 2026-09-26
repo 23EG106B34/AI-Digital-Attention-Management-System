@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     # Third-party
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
 
     # FocusGuard Apps
@@ -115,7 +116,9 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': False,
+    # Rotated / explicitly logged-out refresh tokens are invalidated so that
+    # signing out actually ends the session (see LogoutView).
+    'BLACKLIST_AFTER_ROTATION': True,
 }
 
 # CORS Configuration

@@ -462,13 +462,12 @@ def run_agent():
                     if session_active_state:
                         log.info('[FOCUS] Focus Session is ACTIVE! Real-time app & switch tracking enabled.')
                     else:
-                        log.info('[FOCUS] Focus Session is IDLE. Monitoring paused. (Click "Start Session" in dashboard to track).')
+                        log.info('[FOCUS] Focus Session is IDLE. Tracking continues; focus restrictions are inactive.')
                         current_proc = None
                         session_start = None
 
-            if not session_active_state:
-                time.sleep(POLL_SECS)
-                continue
+            # Keep collecting real desktop telemetry outside focus sessions; focus mode
+            # controls restrictions and session-specific scoring, not data collection.
 
             # ── Check user inactivity (Idle Limit: 10 minutes) ──
             idle_secs = get_idle_duration_secs()

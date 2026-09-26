@@ -1,0 +1,5 @@
+Retrieval-Augmented Generation (RAG) combines a retrieval system with a language model.
+A retriever searches a knowledge base of embedded documents for passages that are semantically similar to the user's question, usually by vector similarity over sentence embeddings.
+The retrieved passages are then supplied to the generating model as grounding context, so the answer is based on stored reference material instead of only the model's memorised parameters.
+RAG reduces hallucination and allows the knowledge to be updated by re-indexing documents rather than retraining the model.
+In this project, FocusGuard AI stores each reference note as a document in ChromaDB and retrieves the closest documents before composing an answer with a source label.

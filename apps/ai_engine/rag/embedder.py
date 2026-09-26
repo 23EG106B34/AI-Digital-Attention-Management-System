@@ -10,6 +10,12 @@ def get_embedding_model():
     return _embedder
 
 def embed_text(text: str) -> list[float]:
-    model = get_embedding_model()
-    embeddings = model.encode(text)
-    return embeddings.tolist()
+    try:
+        model = get_embedding_model()
+        embeddings = model.encode(text)
+        return embeddings.tolist()
+    except Exception as exc:
+        # Callers (retriever / seeding) already treat empty results as
+        # "engine unavailable" and return honest insufficient-data answers.
+        print(f"[RAG Embedder Warning] embedding unavailable: {exc}")
+        raise

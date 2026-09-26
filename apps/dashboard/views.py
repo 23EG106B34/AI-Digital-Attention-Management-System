@@ -281,7 +281,8 @@ class DashboardSummaryView(generics.GenericAPIView):
             'active_focus_session': active_focus_data,
             'today_sessions':     today_sessions,
             # Extension
-            'extension_connected': bool(cache.get(f"ext_active_{user.id}") or browse_total > 0 or BrowsingLog.objects.filter(user=user).exists()),
+            # Only a recent authenticated extension request constitutes a live connection.
+            'extension_connected': bool(cache.get(f"ext_active_{user.id}")),
             'extension_recent': bool(cache.get(f"ext_active_{user.id}")),
             # AI
             'ai_insight': insight_data,

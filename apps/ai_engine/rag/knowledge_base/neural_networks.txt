@@ -1,0 +1,12 @@
+"""
+FocusGuard AI — Productivity & Computer-Science reference notes.
+Source: general study reference for the local RAG knowledge base.
+"""
+
+A neural network is a machine-learning model inspired by the brain.
+It consists of layers of interconnected units (neurons): an input
+layer, one or more hidden layers, and an output layer. Each connection
+has a weight; training adjusts weights via backpropagation to minimize
+a loss function. Activation functions such as ReLU or sigmoid introduce
+non-linearity. Neural networks underpin deep learning for image,
+speech, and language tasks.

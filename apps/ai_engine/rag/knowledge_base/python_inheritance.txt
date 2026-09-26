@@ -1,0 +1,14 @@
+"""
+FocusGuard AI — Productivity & Computer-Science reference notes.
+Source: general study reference for the local RAG knowledge base.
+Each file in this folder is one document seeded into ChromaDB.
+"""
+
+Python inheritance allows a child class to reuse and extend the
+behaviour of a parent class. A child class declared as
+"class Child(Parent):" inherits attributes and methods from Parent.
+The child can override methods, call the parent implementation with
+super(), and add new attributes. Multiple inheritance and the method
+resolution order (MRO) determine lookup order. Inheritance supports
+code reuse and polymorphism: objects of different subclasses can be
+treated through a common parent interface.

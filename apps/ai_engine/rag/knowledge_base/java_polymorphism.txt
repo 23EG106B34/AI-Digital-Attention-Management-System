@@ -1,0 +1,13 @@
+"""
+FocusGuard AI — Productivity & Computer-Science reference notes.
+Source: general study reference for the local RAG knowledge base.
+"""
+
+Polymorphism in Java lets objects of different classes respond to the
+same method call in their own way. It has two main forms: compile-time
+polymorphism through method overloading (same method name, different
+parameters) and runtime polymorphism through method overriding (a
+subclass provides its own implementation of a parent method). The Java
+virtual machine dispatches overridden methods based on the runtime type.
+Interfaces and abstract classes are commonly used to define polymorphic
+contracts.

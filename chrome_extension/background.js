@@ -957,6 +957,10 @@ async function recordSwitchEvent(fromDomain, toDomain, eventDate = new Date()) {
     console.log(JSON.stringify(switchEvent, null, 2));
     console.log('[FocusGuard Switch Count]', newSwitchCount);
 
+    // A genuine browser transition is also sent to the existing Django API.
+    // Local storage remains the offline fallback when no authenticated session exists.
+    await uploadSwitchEvent(switchEvent);
+
     // Evaluate distraction state and trigger notification if transition occurred to DISTRACTED
     await evaluateAndNotifyDistraction({
       domain: toDomain,
@@ -965,6 +969,35 @@ async function recordSwitchEvent(fromDomain, toDomain, eventDate = new Date()) {
     }, new Date(eventDate).getTime());
   } catch (error) {
     console.error('[FocusGuard] Error recording switch event:', error);
+  }
+}
+
+async function uploadSwitchEvent(switchEvent) {
+  const stored = await chrome.storage.local.get(['apiBaseUrl', 'jwtAccessToken']);
+  if (!stored.jwtAccessToken) return;
+  try {
+    const response = await fetch(`${stored.apiBaseUrl || 'http://127.0.0.1:8000/api'}/browsing/switch/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${stored.jwtAccessToken}`,
+        'X-Client-Type': 'chrome-extension'
+      },
+      body: JSON.stringify({
+        from_domain: switchEvent.from,
+        from_title: '',
+        from_category: switchEvent.from_category,
+        to_domain: switchEvent.to,
+        to_title: '',
+        to_category: switchEvent.to_category,
+        switched_at: switchEvent.timestamp
+      })
+    });
+    if (!response.ok) {
+      console.warn('[FocusGuard] Switch sync rejected:', response.status);
+    }
+  } catch (error) {
+    console.warn('[FocusGuard] Switch sync failed; event remains stored locally.', error);
   }
 }
 
@@ -1492,6 +1525,20 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
  * Allows popup to reconcile and fetch the active session upon opening.
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message && message.type === 'SYNC_AUTH_TOKEN') {
+    chrome.storage.local.set({
+      jwtAccessToken: message.token,
+      jwtRefreshToken: message.refresh || ''
+    }).then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
+  if (message && message.type === 'SET_SESSION_STATUS') {
+    chrome.storage.local.set({ focusSessionActive: Boolean(message.active) })
+      .then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
   if (message && message.type === 'POPUP_OPENED') {
     withSessionLock(async () => {
       const active = await getActiveSession();

@@ -238,6 +238,8 @@ IDLE_APP_NAMES = {'system idle / away', 'system idle', 'idle'}
 CHECKIN_THRESHOLD_SECS = 600
 # A browsing log older than this is NOT reported as the "current tab".
 TAB_STALE_SECS = 300
+# A completed idle period prompts for a return check-in only while recent.
+RETURN_PROMPT_WINDOW_SECS = 900
 # ~1 hour of REAL productive focus enables the optional refresh.
 PRODUCTIVE_REFRESH_SECS = 3600
 
@@ -499,6 +501,30 @@ class CurrentFocusView(generics.GenericAPIView):
         ).exists():
             checkin_due = False
 
+        return_checkin = {
+            'due': False,
+            'away_secs': 0,
+            'episode_key': '',
+        }
+        if session:
+            completed_idle = SystemAppLog.objects.filter(
+                user=user,
+                process_name__iexact='idle',
+                started_at__gte=session.start_time,
+                ended_at__gte=now - timedelta(seconds=RETURN_PROMPT_WINDOW_SECS),
+                ended_at__lte=now,
+                duration_secs__gte=CHECKIN_THRESHOLD_SECS,
+            ).order_by('-ended_at').first()
+            if completed_idle:
+                return_key = f'return:{session.id}:{completed_idle.id}'
+                return_checkin = {
+                    'due': not FocusCheckIn.objects.filter(
+                        user=user, kind='RETURN', episode_key=return_key
+                    ).exists(),
+                    'away_secs': max(0, int(completed_idle.duration_secs or 0)),
+                    'episode_key': return_key,
+                }
+
         # ── Optional 1-hour productive refresh ──────────────────────────
         refresh = {
             'due': False,
@@ -559,6 +585,7 @@ class CurrentFocusView(generics.GenericAPIView):
                 'question_key': profile_data['question_key'],
                 'timeout_secs': 180,
             },
+            'return_checkin': return_checkin,
             'refresh': refresh,
             'detected_at': now.isoformat(),
         })

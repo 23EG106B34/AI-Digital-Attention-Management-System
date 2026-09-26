@@ -433,6 +433,8 @@ def run_agent():
     current_log_id = None
 
     is_idle_state  = False
+    idle_started_ts = None
+    last_idle_report = 0.0
     session_active_state = None
     last_session_check = 0.0
 
@@ -477,6 +479,7 @@ def run_agent():
                 if not is_idle_state:
                     log.warning(f'⏸️  User is IDLE ({int(idle_secs / 60)}m inactivity > 10m limit). Pausing tracking.')
                     is_idle_state = True
+                    idle_started_ts = now_ts - idle_secs
                     # Close previous active session if running
                     if current_proc and session_start:
                         duration = max(1, int(now_ts - session_start))
@@ -496,26 +499,52 @@ def run_agent():
                         current_proc = None
                         session_start = None
 
-                    # Log Idle period as neutral system activity
+                idle_started_ts = idle_started_ts if idle_started_ts is not None else now_ts - idle_secs
+                if now_ts - last_idle_report >= 15.0:
+                    idle_duration = max(0, int(now_ts - idle_started_ts))
+                    idle_started_at = datetime.fromtimestamp(
+                        idle_started_ts, tz=timezone.utc
+                    ).isoformat()
+                    # The backend upserts this open neutral log by process name.
                     client.post_log({
                         'process_name':       'idle',
                         'app_name':           'System Idle / Away',
-                        'window_title':       f'Inactive for >10m ({int(idle_secs / 60)}m total)',
+                        'window_title':       f'Inactive for {idle_duration // 60}m total',
                         'exe_path':           '',
                         'category':           'SYSTEM',
                         'productivity_label': 'NEUTRAL',
                         'confidence_score':   1.0,
-                        'started_at':         now_iso,
+                        'started_at':         idle_started_at,
                         'ended_at':           None,
-                        'duration_secs':      int(idle_secs),
+                        'duration_secs':      idle_duration,
                     })
+                    last_idle_report = now_ts
 
                 time.sleep(POLL_SECS)
                 continue
 
             if is_idle_state:
                 log.info('▶️  User returned from idle state. Resuming active tracking.')
+                idle_duration = max(0, int(now_ts - idle_started_ts)) if idle_started_ts is not None else 0
+                idle_started_at = datetime.fromtimestamp(
+                    idle_started_ts if idle_started_ts is not None else now_ts,
+                    tz=timezone.utc
+                ).isoformat()
+                client.post_log({
+                    'process_name':       'idle',
+                    'app_name':           'System Idle / Away',
+                    'window_title':       f'Inactive for {idle_duration // 60}m total',
+                    'exe_path':           '',
+                    'category':           'SYSTEM',
+                    'productivity_label': 'NEUTRAL',
+                    'confidence_score':   1.0,
+                    'started_at':         idle_started_at,
+                    'ended_at':           now_iso,
+                    'duration_secs':      idle_duration,
+                })
                 is_idle_state = False
+                idle_started_ts = None
+                last_idle_report = 0.0
                 current_proc = None
                 session_start = None
 

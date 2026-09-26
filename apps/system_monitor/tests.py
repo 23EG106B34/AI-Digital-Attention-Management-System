@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from rest_framework.test import APIClient
 from apps.focus_sessions.models import FocusSession
-from apps.system_monitor.models import AttentionLog
+from apps.system_monitor.models import AttentionLog, SystemAppLog
 
 
 class AttentionTrackingTests(TestCase):
@@ -78,3 +78,39 @@ class AttentionTrackingTests(TestCase):
         self.assertTrue(res.data['is_active'])
         self.assertEqual(res.data['state'], 'LOOKING_AT_PHONE')
         self.assertEqual(res.data['phone_distraction_count'], 1)
+
+    def test_idle_heartbeats_update_one_neutral_log_and_close_it(self):
+        started_at = timezone.now() - timezone.timedelta(minutes=10)
+        base_payload = {
+            'process_name': 'idle',
+            'app_name': 'System Idle / Away',
+            'window_title': 'Inactive',
+            'exe_path': '',
+            'category': 'SYSTEM',
+            'productivity_label': 'NEUTRAL',
+            'confidence_score': 1.0,
+            'started_at': started_at.isoformat(),
+            'ended_at': None,
+            'duration_secs': 600,
+        }
+        first = self.client.post('/api/system/log/', base_payload, format='json')
+        self.assertEqual(first.status_code, 201)
+
+        heartbeat = {**base_payload, 'duration_secs': 720}
+        updated = self.client.post('/api/system/log/', heartbeat, format='json')
+        self.assertEqual(updated.status_code, 200)
+
+        finished = {
+            **heartbeat,
+            'ended_at': timezone.now().isoformat(),
+            'duration_secs': 901,
+        }
+        closed = self.client.post('/api/system/log/', finished, format='json')
+        self.assertEqual(closed.status_code, 200)
+
+        logs = SystemAppLog.objects.filter(user=self.user, process_name='idle')
+        self.assertEqual(logs.count(), 1)
+        log = logs.get()
+        self.assertEqual(log.productivity_label, 'NEUTRAL')
+        self.assertEqual(log.duration_secs, 901)
+        self.assertIsNotNone(log.ended_at)

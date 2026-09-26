@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import FocusSession, FocusCheckIn
+from .models import FOCUS_GOALS, FocusSession, FocusCheckIn
 from .goals import normalize_goal
 
 
@@ -18,7 +18,7 @@ class FocusSessionSerializer(serializers.ModelSerializer):
         if not value:
             return 'OTHER'
         normalized = normalize_goal(value)
-        valid_keys = {choice[0] for choice in FocusSession.GOAL_CHOICES}
+        valid_keys = {choice[0] for choice in FOCUS_GOALS}
         if normalized in valid_keys:
             return normalized
         return value

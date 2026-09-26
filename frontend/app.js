@@ -354,7 +354,26 @@ function showRegError(msg) {
   }
 }
 
-function signOut() {
+async function signOut() {
+  const accessToken = state.token;
+  const refreshToken = state.refresh;
+  if (accessToken && refreshToken) {
+    try {
+      const response = await fetch(`${API}/auth/logout/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ refresh: refreshToken }),
+      });
+      if (!response.ok && response.status !== 401) {
+        console.error(`Logout request failed (${response.status}).`);
+      }
+    } catch (error) {
+      console.error('Logout request failed:', error);
+    }
+  }
   clearToken();
   stopPoll();
   showLogin();
@@ -555,7 +574,10 @@ function updateLiveVisionUI(d) {
 
 
 function formatDuration(totalSecs) {
-  const s = Math.max(0, Math.round(totalSecs || 0));
+  const s = Math.max(0, Math.round(Number(totalSecs) || 0));
+  if (window.fgI18n && typeof window.fgI18n.formatDuration === 'function') {
+    return window.fgI18n.formatDuration(s, 'en');
+  }
   const mins = Math.floor(s / 60);
   const remSecs = s % 60;
   if (mins < 60) return `${mins}m ${remSecs}s`;
@@ -1512,8 +1534,8 @@ function openAIReportModal(insightData, dashboardData, isLoading = false) {
 
   const prodS = d.productive_secs ?? Math.round((d.productive_hours || 0) * 3600);
   const distS = d.distracted_secs ?? Math.round((d.distracted_hours || 0) * 3600);
-  const prodFormatted = d.productive_formatted || formatDuration(prodS);
-  const distFormatted = d.distracted_formatted || formatDuration(distS);
+  const prodFormatted = formatDuration(prodS);
+  const distFormatted = formatDuration(distS);
 
   const pScore = Math.round(d.productivity_score ?? (distS === 0 ? 100 : Math.round((prodS / (prodS + distS)) * 100)));
   const fScore = Math.round(d.focus_score ?? pScore);
@@ -1662,8 +1684,8 @@ async function loadDateReport(dateStr) {
     qs('#dateReportVerdictReason').textContent = d.verdict_reason || '';
 
     // 4 Metrics
-    qs('#dateReportProdHours').textContent = d.productive_formatted || formatDuration(d.productive_secs ?? Math.round((d.productive_hours || 0) * 3600));
-    qs('#dateReportDistHours').textContent = d.distracted_formatted || formatDuration(d.distracted_secs ?? Math.round((d.distracted_hours || 0) * 3600));
+    qs('#dateReportProdHours').textContent = formatDuration(d.productive_secs ?? Math.round((d.productive_hours || 0) * 3600));
+    qs('#dateReportDistHours').textContent = formatDuration(d.distracted_secs ?? Math.round((d.distracted_hours || 0) * 3600));
     qs('#dateReportSwitches').textContent = d.total_switches;
     qs('#dateReportScore').textContent = `${Math.round(d.productivity_score)}%`;
 
@@ -3148,6 +3170,9 @@ qs('#filterBadgeLocked')?.addEventListener('click', () => setBadgesFilter('locke
    ═══════════════════════════════════════════════════════ */
 let idlePopupCountdownTimer = null;
 let idlePopupSecondsLeft = 180;
+let pendingIdleCheckIn = null;
+let pendingReturnCheckIn = null;
+let pendingFocusRefresh = null;
 
 function initTheme() {
   const saved = localStorage.getItem('fg_theme') || 'light';
@@ -3211,26 +3236,40 @@ function initProfileDropdown() {
 
 async function updateCurrentFocusDisplay() {
   try {
-    const res = await apiFetch('/focus/current-status/');
-    if (!res.ok) return;
+    const res = await apiFetch('/focus/current-focus/');
+    if (!res.ok) {
+      console.error(`Current focus request failed (${res.status}).`);
+      return;
+    }
     const d = await res.json();
-    setEl('cfGoal', d.goal || 'Studying');
-    setEl('cfApp', d.current_app || '—');
+    const app = d.application || {};
+    const tab = d.tab || {};
+    const statusLabels = {
+      FOCUSED: 'Focused',
+      DISTRACTED: 'Distracted',
+      BLOCKED: 'Blocked',
+      IDLE: 'Idle',
+      AWAY: 'Away',
+      UNKNOWN: 'Idle',
+    };
+    setEl('cfGoal', goalLabel(d.goal || 'OTHER'));
+    setEl('cfApp', app.name || '—');
     const tabEl = qs('#cfTab');
     if (tabEl) {
-      tabEl.textContent = d.current_tab || 'Current tab information unavailable';
-      tabEl.title = d.current_tab || 'Current tab information unavailable';
+      tabEl.textContent = tab.title || 'Current tab information unavailable';
+      tabEl.title = tab.title || 'Current tab information unavailable';
     }
-    setEl('cfDomain', d.domain || '—');
-    setEl('cfDuration', formatDuration(d.duration_secs || 0));
+    setEl('cfDomain', tab.domain || '—');
+    setEl('cfDuration', formatDuration(app.duration_secs ?? d.duration_secs ?? 0));
 
     const badgeEl = qs('#cfStatusBadge');
     if (badgeEl) {
-      badgeEl.textContent = d.status || 'Idle';
-      if (d.status === 'Focused') {
+      const status = statusLabels[String(d.status || 'IDLE').toUpperCase()] || 'Idle';
+      badgeEl.textContent = status;
+      if (status === 'Focused') {
         badgeEl.style.background = 'var(--color-success-bg)';
         badgeEl.style.color = 'var(--color-success)';
-      } else if (d.status === 'Distracted' || d.status === 'Blocked') {
+      } else if (status === 'Distracted' || status === 'Blocked') {
         badgeEl.style.background = 'var(--color-danger-bg)';
         badgeEl.style.color = 'var(--color-danger)';
       } else {
@@ -3239,16 +3278,40 @@ async function updateCurrentFocusDisplay() {
       }
     }
 
-    if (d.should_prompt_idle) showIdlePopup(d);
-    if (d.should_prompt_return) showReturnExperience(d);
-    if (d.should_prompt_hourly) showHourlyRefresh(d);
-  } catch (e) {}
+    if (d.checkin?.due) {
+      showIdlePopup({
+        ...d,
+        current_app: app.name,
+        current_tab: tab.title,
+      });
+    }
+    if (d.return_checkin?.due) showReturnExperience(d);
+    if (d.refresh?.due) showHourlyRefresh(d);
+  } catch (e) {
+    if (e.message !== 'Unauthorized') console.error('Current focus error:', e);
+  }
+}
+
+async function submitFocusCheckIn({ kind, state: checkInState, reason = '', episodeKey = '', responseText = '' }) {
+  const res = await apiFetch('/focus/checkin/', {
+    method: 'POST',
+    body: JSON.stringify({
+      kind,
+      state: checkInState,
+      reason,
+      episode_key: episodeKey,
+      response_text: responseText,
+    }),
+  });
+  if (!res.ok) throw new Error(`Focus check-in request failed (${res.status})`);
+  return res.json();
 }
 
 function showIdlePopup(d) {
   const modal = qs('#idleDistractionModal');
   if (!modal || modal.style.display === 'flex') return;
 
+  pendingIdleCheckIn = d.checkin || null;
   const rawGoal = d.goal || 'STUDYING';
   const displayGoal = goalLabel(rawGoal);
   setEl('idleGoalDisplay', displayGoal);
@@ -3277,11 +3340,21 @@ function showIdlePopup(d) {
     if (idlePopupSecondsLeft <= 0) {
       clearInterval(idlePopupCountdownTimer);
       modal.style.display = 'none';
-      await apiFetch('/focus/idle-response/', {
-        method: 'POST',
-        body: JSON.stringify({ action: 'LOCK' })
-      });
-      toast('Focus session auto-locked due to inactivity.', 'danger');
+      const checkin = pendingIdleCheckIn;
+      pendingIdleCheckIn = null;
+      if (!checkin) return;
+      try {
+        await submitFocusCheckIn({
+          kind: 'IDLE_CHECK',
+          state: 'SKIPPED',
+          reason: checkin.reason || 'NO_RESPONSE',
+          episodeKey: checkin.episode_key,
+        });
+        toast('Focus check response recorded as skipped.', 'info');
+      } catch (error) {
+        console.error(error);
+        toast('Unable to record focus check.', 'danger');
+      }
     }
   }, 1000);
 }
@@ -3290,29 +3363,45 @@ function closeIdlePopup() {
   const modal = qs('#idleDistractionModal');
   if (modal) modal.style.display = 'none';
   if (idlePopupCountdownTimer) clearInterval(idlePopupCountdownTimer);
+  pendingIdleCheckIn = null;
 }
 function initIdleModalListeners() {
   qs('#idleActiveBtn')?.addEventListener('click', async () => {
     const topic = qs('#idleTopicAnswer')?.value || '';
-    closeIdlePopup();
+    const checkin = pendingIdleCheckIn;
+    if (!checkin) return;
     try {
-      await apiFetch('/focus/idle-response/', {
-        method: 'POST',
-        body: JSON.stringify({ action: 'ACTIVE', topic })
+      await submitFocusCheckIn({
+        kind: 'IDLE_CHECK',
+        state: 'ACTIVE',
+        reason: checkin.reason,
+        episodeKey: checkin.episode_key,
+        responseText: topic,
       });
+      closeIdlePopup();
       toast("Welcome back! You're marked active.", 'success');
-    } catch (e) {}
+    } catch (error) {
+      console.error(error);
+      toast('Unable to record focus check.', 'danger');
+    }
   });
 
   qs('#idleAwayBtn')?.addEventListener('click', async () => {
-    closeIdlePopup();
+    const checkin = pendingIdleCheckIn;
+    if (!checkin) return;
     try {
-      await apiFetch('/focus/idle-response/', {
-        method: 'POST',
-        body: JSON.stringify({ action: 'AWAY' })
+      await submitFocusCheckIn({
+        kind: 'IDLE_CHECK',
+        state: 'AWAY',
+        reason: checkin.reason,
+        episodeKey: checkin.episode_key,
       });
-      toast("Marked as Away. We'll pause your session.", 'info');
-    } catch (e) {}
+      closeIdlePopup();
+      toast('Away status recorded.', 'info');
+    } catch (error) {
+      console.error(error);
+      toast('Unable to record focus check.', 'danger');
+    }
   });
 }
 
@@ -3320,8 +3409,9 @@ function showReturnExperience(d) {
   const modal = qs('#returnExperienceModal');
   if (!modal || modal.style.display === 'flex') return;
 
-  const awayMins = Math.round((d.away_secs || 0) / 60);
-  setEl('returnAwayTitle', `You were away for ${awayMins} minute${awayMins === 1 ? '' : 's'}.`);
+  pendingReturnCheckIn = d.return_checkin || null;
+  const awaySecs = Math.max(0, Number(pendingReturnCheckIn?.away_secs) || 0);
+  setEl('returnAwayTitle', `${tr('You were away for')} ${formatDuration(awaySecs)}.`);
 
   const msgEl = qs('#returnMotivationalMsg');
   const resumeBtn = qs('#returnResumeBtn');
@@ -3339,11 +3429,19 @@ function initReturnExperienceListeners() {
       const resumeBtn = qs('#returnResumeBtn');
 
       try {
-        await apiFetch('/focus/return-response/', {
-          method: 'POST',
-          body: JSON.stringify({ activity: act })
+        await submitFocusCheckIn({
+          kind: 'RETURN',
+          state: 'ACTIVE',
+          reason: 'RETURN',
+          episodeKey: pendingReturnCheckIn?.episode_key || '',
+          responseText: act,
         });
-      } catch (e) {}
+        pendingReturnCheckIn = null;
+      } catch (error) {
+        console.error(error);
+        toast('Unable to record your return activity.', 'danger');
+        return;
+      }
 
       if (msgEl) {
         msgEl.textContent = "Welcome back. Let's continue your focus session.";
@@ -3365,6 +3463,7 @@ function showHourlyRefresh(d) {
   const modal = qs('#hourlyRefreshModal');
   if (!modal || modal.style.display === 'flex') return;
 
+  pendingFocusRefresh = d.refresh || null;
   const rawGoal = d.goal || 'STUDYING';
   const label = goalLabel(rawGoal).toUpperCase();
   setEl('refreshGoalTag', `${label} REFRESH`);
@@ -3384,14 +3483,30 @@ function showHourlyRefresh(d) {
 }
 
 function initHourlyRefreshListeners() {
+  const saveRefresh = async checkInState => {
+    const refresh = pendingFocusRefresh;
+    if (!refresh?.episode_key) return;
+    try {
+      await submitFocusCheckIn({
+        kind: 'REFRESH',
+        state: checkInState,
+        reason: 'REFRESH',
+        episodeKey: refresh.episode_key,
+      });
+      const modal = qs('#hourlyRefreshModal');
+      if (modal) modal.style.display = 'none';
+      pendingFocusRefresh = null;
+      toast(checkInState === 'ACTIVE' ? 'Focus refresh recorded.' : 'Refresh dismissed.', 'success');
+    } catch (error) {
+      console.error(error);
+      toast('Unable to record focus refresh.', 'danger');
+    }
+  };
   qs('#btnDismissRefresh')?.addEventListener('click', () => {
-    const modal = qs('#hourlyRefreshModal');
-    if (modal) modal.style.display = 'none';
+    saveRefresh('SKIPPED');
   });
   qs('#btnAcknowledgeRefresh')?.addEventListener('click', () => {
-    const modal = qs('#hourlyRefreshModal');
-    if (modal) modal.style.display = 'none';
-    toast('Great work! Keep up the deep focus.', 'success');
+    saveRefresh('ACTIVE');
   });
 }
 
@@ -3525,9 +3640,12 @@ function initApp() {
   initHourlyRefreshListeners();
   initAIChat();
   const u = state.username || 'User';
-  qs('#userAvatar').textContent = u.charAt(0).toUpperCase();
-  qs('#sidebarUsername').textContent = u;
-  qs('#headerProfileName').textContent = u;
+  const initial = u.trim().charAt(0).toLocaleUpperCase() || '?';
+  if (qs('#userAvatar')) qs('#userAvatar').textContent = initial;
+  if (qs('#topbarUserInitial')) qs('#topbarUserInitial').textContent = initial;
+  if (qs('#dropdownUsername')) qs('#dropdownUsername').textContent = u;
+  if (qs('#sidebarUsername')) qs('#sidebarUsername').textContent = u;
+  if (qs('#headerProfileName')) qs('#headerProfileName').textContent = u;
   switchTab('dashboard');
   fetchGamificationData();
   updateCurrentFocusDisplay();
